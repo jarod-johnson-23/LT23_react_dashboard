@@ -13,6 +13,7 @@ import BCMediaTool from "./BCMediaTool";
 import CocopahDB from "./CocopahDB";
 import Transcription from "./Transcription";
 import SowUpload from "./SowUpload";
+import SowChatBot from "./SowChatBot";
 
 function App() {
   return (
@@ -98,6 +99,15 @@ function App() {
           element={
             <PrivateRoute>
               <SowUpload />
+            </PrivateRoute>
+          }
+          exact
+        />
+        <Route
+          path="/sow_chat_bot"
+          element={
+            <PrivateRoute>
+              <SowChatBot />
             </PrivateRoute>
           }
           exact
