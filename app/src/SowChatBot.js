@@ -11,6 +11,7 @@ const SowChatBot = () => {
     const [isAssistantResponding, setIsAssistantResponding] = useState(false);
     const socketRef = useRef(null);
     const firstMessageReceived = useRef(false);
+    const inputRef = useRef(null);
 
     useEffect(() => {
         const fetchUserEmail = async () => {
@@ -104,20 +105,36 @@ const SowChatBot = () => {
         }
     };
 
+    const handleKeyDown = (event) => {
+        if (event.key === 'Enter') {
+            sendMessage();
+        }
+    };
+
     const formatMessage = (message) => {
-        // Replace **text** with <strong>text</strong> and newline characters with <br> elements
-        const formattedMessage = message.split('\n').map((item, index) => (
-            <span key={index}>
-                {item.split(/(\*\*.*?\*\*)/g).map((part, i) => {
-                    if (part.startsWith('**') && part.endsWith('**')) {
-                        return <strong key={i}>{part.slice(2, -2)}</strong>;
-                    }
-                    return part;
-                })}
-                <br />
-            </span>
-        ));
-        return formattedMessage;
+        // Split message into lines
+        const lines = message.split('\n');
+        return lines.map((line, index) => {
+            // Check for header formatting
+            const headerMatch = line.match(/^(#+)\s*(.*)$/);
+            if (headerMatch) {
+                const headerLevel = headerMatch[1].length;  // Number of # characters
+                const headerText = headerMatch[2];  // Text following the # characters
+                const HeaderTag = `h${headerLevel}`;  // Construct header tag (h1, h2, etc.)
+                return <HeaderTag key={index}>{headerText}</HeaderTag>;
+            }
+
+            // Replace **text** with <strong>text</strong>
+            const formattedLine = line.split(/(\*\*.*?\*\*)/g).map((part, i) => {
+                if (part.startsWith('**') && part.endsWith('**')) {
+                    return <strong key={i}>{part.slice(2, -2)}</strong>;
+                }
+                return part;
+            });
+
+            // Return formatted line with <br> for new lines
+            return <span key={index}>{formattedLine}<br /></span>;
+        });
     };
 
     return (
@@ -138,8 +155,10 @@ const SowChatBot = () => {
                     type="text" 
                     value={input} 
                     onChange={(e) => setInput(e.target.value)} 
+                    onKeyDown={handleKeyDown}
                     placeholder="Type your message..." 
                     disabled={!userEmail || isAssistantResponding}  // Disable input until user email is fetched or while assistant is responding
+                    ref={inputRef}
                 />
                 <button onClick={sendMessage} disabled={!userEmail || isAssistantResponding}>Send</button>
             </div>

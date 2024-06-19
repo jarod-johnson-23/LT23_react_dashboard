@@ -1,0 +1,83 @@
+.file-header-combo {
+  background-color: #223456;
+  width: fit-content;
+  padding: 10px 25px 25px 25px;
+  color: #fff;
+  margin: 25px;
+  border-radius: 8px;
+}
+
+.ml-file-drops {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.special-offers input {
+  border: 2px solid #223456;
+  border-radius: 4px;
+  margin: 2px;
+}
+
+.header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.special-offers input[type=checkbox] {
+  margin-top: 10px;
+  margin-right: 10px;
+}
+
+.special-offers button {
+  background-color: #3fbeea;
+  border: 1.5px solid #3fbeea;
+  color: #223651;
+  transition: 0.15s;
+  border-radius: 4px;
+  font-weight: 400;
+  margin: 10px;
+  margin-bottom: 5px;
+}
+
+.special-offers button:hover {
+  cursor: pointer;
+  background-color: #223651;
+  color: #3fbeea;
+}
+
+
+.special-offers select {
+  margin: 15px;
+}
+
+.lowest-tier-section {
+  margin-left: 15px;
+}
+
+.special-offers table {
+  margin-left: 15px;
+}
+
+.patriot-checkbox {
+  margin-left: 15px;
+}
+
+.file-header-combo button {
+  width: 240px;
+  height: 54px;
+  background-color: #3fbeea;
+  border: 1.5px solid #3fbeea;
+  color: #223651;
+  font-size: 18px;
+  transition: 0.15s;
+  border-radius: 4px;
+  font-weight: 900;
+}
+
+.file-header-combo button:hover {
+  cursor: pointer;
+  background-color: #223651;
+  color: #3fbeea;
+}
