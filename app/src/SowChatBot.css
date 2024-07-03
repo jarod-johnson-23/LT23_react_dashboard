@@ -8,7 +8,7 @@
 .chat-window {
   flex-grow: 1;
   padding: 20px;
-  overflow-y: scroll;
+  overflow-y: auto; /* Ensure scrolling */
   display: flex;
   flex-direction: column;
 }
@@ -19,20 +19,85 @@
   padding: 10px;
   border-radius: 10px;
   word-wrap: break-word;
+  flex-shrink: 0; /* Prevent bubbles from shrinking */
 }
 
 .user-message {
   align-self: flex-end;
-  background-color: #daf8cb;
+  background-color: #223651ff;
+  color: #fff;
 }
 
 .assistant-message {
   align-self: flex-start;
   background-color: #f1f0f0;
+  min-height: 20px;
 }
 
 .input-container {
   display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: end;
   padding: 10px;
-  border-top: 1px solid #ddd;
+  height: fit-content;
+  background-color: #223651ff;
+}
+
+.input-container textarea {
+  margin: 10px;
+  height: 38px;
+  max-height: 100px;
+  width: 400px;
+  border-radius: 8px;
+  border: 1px solid #ffffff;
+  background-color: #223651ff;
+  color: #ffffff;
+  font-size: 16px;
+  padding: 8px;
+  resize: none; /* Prevent manual resizing by the user */
+  overflow-y: scroll; /* Enable vertical scrollbar */
+}
+
+.input-container textarea:focus {
+  outline: none; /* Remove blue outline on focus */
+}
+
+/* For most modern browsers */
+.input-container textarea::placeholder {
+  color: #ffffff99;
+}
+
+/* For older versions of Firefox */
+.input-container textarea:-moz-placeholder {
+  color: #ffffff99;
+}
+
+/* For older versions of Internet Explorer */
+.input-container textarea:-ms-input-placeholder {
+  color: #ffffff99;
+}
+
+/* For WebKit browsers (Chrome, Safari, etc.) */
+.input-container textarea::-webkit-input-placeholder {
+  color: #ffffff99;
+}
+
+.input-container button {
+  width: 125px;
+  height: 54px;
+  background-color: #3fbeea;
+  border: 1.5px solid #3fbeea;
+  color: #223651;
+  font-size: 18px;
+  transition: 0.15s;
+  border-radius: 4px;
+  font-weight: 900;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.input-container button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6; /* Optional: to visually indicate the button is disabled */
 }
