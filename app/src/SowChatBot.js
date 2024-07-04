@@ -168,19 +168,16 @@ const SowChatBot = () => {
     console.log("Creating link for " + filename);
     console.log("Creating link for " + file_id);
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/assistants/download_file`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            file_id: file_id,
-            filename: filename,
-          }),
-        }
-      );
+      const response = await fetch(`${API_BASE_URL}/assistants/download_file`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          file_id: file_id,
+          filename: filename,
+        }),
+      });
 
       if (!response.ok) {
         throw new Error("Network response was not ok");
@@ -203,8 +200,24 @@ const SowChatBot = () => {
   const formatMessage = (message, downloadFile) => {
     // Split message into lines
     const lines = message.split("\n");
-  
+
+    let isInCodeBlock = false;
+
     return lines.map((line, index) => {
+      // Check for code block start or end
+      if (line.trim() === "```") {
+        isInCodeBlock = !isInCodeBlock;
+        return <br key={index} />;
+      }
+
+      if (isInCodeBlock) {
+        return (
+          <pre key={index}>
+            <code>{line}</code>
+          </pre>
+        );
+      }
+
       // Check for header formatting
       const headerMatch = line.match(/^(#+)\s*(.*)$/);
       if (headerMatch) {
@@ -213,56 +226,69 @@ const SowChatBot = () => {
         const HeaderTag = `h${headerLevel}`; // Construct header tag (h1, h2, etc.)
         return <HeaderTag key={index}>{headerText}</HeaderTag>;
       }
-  
+
       // Process inline formatting (bold, italic, inline code)
-      const formattedLine = line.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g).map((part, i) => {
-        if (part.startsWith("**") && part.endsWith("**")) {
-          return <strong key={`${index}-${i}`}>{part.slice(2, -2)}</strong>;
-        }
-        if (part.startsWith("*") && part.endsWith("*")) {
-          return <em key={`${index}-${i}`}>{part.slice(1, -1)}</em>;
-        }
-        if (part.startsWith("`") && part.endsWith("`")) {
-          return <code key={`${index}-${i}`}>{part.slice(1, -1)}</code>;
-        }
-        return part;
-      });
-  
+      const formattedLine = line
+        .split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g)
+        .map((part, i) => {
+          if (part.startsWith("**") && part.endsWith("**")) {
+            return <strong key={`${index}-${i}`}>{part.slice(2, -2)}</strong>;
+          }
+          if (part.startsWith("*") && part.endsWith("*")) {
+            return <em key={`${index}-${i}`}>{part.slice(1, -1)}</em>;
+          }
+          if (part.startsWith("`") && part.endsWith("`")) {
+            return <code key={`${index}-${i}`}>{part.slice(1, -1)}</code>;
+          }
+          return part;
+        });
+
       // Join formatted parts back into a single string for further processing
-      const formattedLineString = formattedLine.reduce((acc, curr) => acc.concat(curr), '');
-  
+      const formattedLineString = formattedLine.reduce(
+        (acc, curr) => acc.concat(curr),
+        ""
+      );
+
       // Check for download link formatting
-      const downloadLinkMatch = line.match(/\[([^\]]+)\]\(sandbox:\/mnt\/data\/([^\)]+)\)/);
+      const downloadLinkMatch = line.match(
+        /\[([^\]]+)\]\(sandbox:\/mnt\/data\/([^\)]+)\)/
+      );
       if (downloadLinkMatch) {
         const linkText = downloadLinkMatch[1];
         const filename = downloadLinkMatch[2];
         console.log("Created filename link: " + filename);
         return (
-          <a
-            key={index}
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              downloadFile(filename);
-            }}
-          >
-            {linkText}
-          </a>
+          <>
+            {" "}
+            <a
+              key={index}
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                downloadFile(filename);
+              }}
+            >
+              {linkText}
+            </a>
+            <br/>
+          </>
         );
       }
-  
+
       // Check for blockquote formatting
       const blockquoteMatch = line.match(/^>\s*(.*)$/);
       if (blockquoteMatch) {
         return <blockquote key={index}>{blockquoteMatch[1]}</blockquote>;
       }
-  
+
       // Check for list formatting
       const listItemMatch = line.match(/^[-*]\s+(.*)$/);
       if (listItemMatch) {
-        return <li key={index}>{formatMessage(listItemMatch[1])}</li>;
+        return (
+          <li key={index}>{formatMessage(listItemMatch[1], downloadFile)}</li>
+        );
       }
-  
+
       // Return formatted line with <br> for new lines
       return (
         <span key={index}>

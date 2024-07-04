@@ -22,6 +22,27 @@
   flex-shrink: 0; /* Prevent bubbles from shrinking */
 }
 
+.message-box h1 {
+  margin: 5px 0px;
+}
+
+.message-box h2 {
+  margin: 5px 0px;
+}
+.message-box h3 {
+  margin: 5px 0px;
+}
+.message-box h4 {
+  margin: 5px 0px;
+}
+.message-box h5 {
+  margin: 5px 0px;
+}
+.message-box h6 {
+  margin: 5px 0px;
+}
+
+
 .user-message {
   align-self: flex-end;
   background-color: #223651ff;
