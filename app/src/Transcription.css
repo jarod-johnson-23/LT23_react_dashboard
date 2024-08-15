@@ -126,6 +126,28 @@
   margin: 10px 40%; /* Center the spinner and give it some vertical space */
 }
 
+.transcript-btn-section {
+  display: flex;
+  flex-direction: row;
+  gap: 25px;
+  margin-top: 55px;
+}
+
+.reset-btn {
+  background-color: #ffffff00;
+  border: none;
+  color: #fff;
+  font-size: 18px;
+  text-decoration: underline;
+  height: fit-content;
+  margin-top: 25px;
+}
+
+.reset-btn:hover {
+  text-decoration: none;
+  cursor:pointer;
+}
+
 @keyframes spin {
   0% {
     transform: rotate(-50deg);
@@ -134,3 +156,4 @@
     transform: rotate(310deg);
   }
 }
+

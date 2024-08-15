@@ -106,7 +106,7 @@ function Homepage() {
             }}
           >
             <div className="img-div">
-              <img src={zip_heatmap_img} alt="heatmap service" />
+              <img src={zip_heatmap_img} alt="heatmap service" loading="lazy" />
             </div>
             <div className="card-info">
               <h4>Heatmap Generator</h4>
@@ -121,7 +121,7 @@ function Homepage() {
             }}
           >
             <div className="img-div">
-              <img src={toyota_img} alt="toyota service" />
+              <img src={toyota_img} alt="toyota service" loading="lazy" />
             </div>
             <div className="card-info">
               <h4>Toyota Media Buy Processing</h4>
@@ -136,7 +136,7 @@ function Homepage() {
             }}
           >
             <div className="img-div">
-              <img src={admin_img} alt="admin service" />
+              <img src={admin_img} alt="admin service" loading="lazy" />
             </div>
             <div className="card-info">
               <h4>Admin Tools</h4>
@@ -151,7 +151,7 @@ function Homepage() {
             }}
           >
             <div className="img-div">
-              <img src={beau_img} alt="admin service" />
+              <img src={beau_img} alt="admin service" loading="lazy" />
             </div>
             <div className="card-info">
               <h4>Beau Joke</h4>
@@ -166,7 +166,11 @@ function Homepage() {
             }}
           >
             <div className="img-div">
-              <img src={lt_redirect_img} alt="url redirect service" />
+              <img
+                src={lt_redirect_img}
+                alt="url redirect service"
+                loading="lazy"
+              />
             </div>
             <div className="card-info">
               <h4>LT URL Redirect</h4>
@@ -181,7 +185,11 @@ function Homepage() {
             }}
           >
             <div className="img-div">
-              <img src={basecamp_img} alt="url redirect service" />
+              <img
+                src={basecamp_img}
+                alt="url redirect service"
+                loading="lazy"
+              />
             </div>
             <div className="card-info">
               <h4>BaseCamp Media Tool</h4>
@@ -196,7 +204,11 @@ function Homepage() {
             }}
           >
             <div className="img-div" id="transcription_img">
-              <img src={transcription_img} alt="Audio transcription service" />
+              <img
+                src={transcription_img}
+                alt="Audio transcription service"
+                loading="lazy"
+              />
             </div>
             <div className="card-info">
               <h4>Audio Transcription Service</h4>
@@ -211,7 +223,7 @@ function Homepage() {
             }}
           >
             <div className="img-div" id="cocopah_img">
-              <img src={cocopah_img} alt="cocopah DB service" />
+              <img src={cocopah_img} alt="cocopah DB service" loading="lazy" />
             </div>
             <div className="card-info">
               <h4>Cocopah Database Management Tool</h4>
@@ -226,7 +238,7 @@ function Homepage() {
             }}
           >
             <div className="img-div" id="sow_img">
-              <img src={sowUpload_img} alt="win98 uploading" />
+              <img src={sowUpload_img} alt="win98 uploading" loading="lazy" />
             </div>
             <div className="card-info">
               <h4>SOW Upload Tool</h4>
@@ -241,7 +253,7 @@ function Homepage() {
             }}
           >
             <div className="img-div" id="sow_img">
-              <img src={sowChatBot_img} alt="contract signing" />
+              <img src={sowChatBot_img} alt="contract signing" loading="lazy" />
             </div>
             <div className="card-info">
               <h4>LT SOW Chat Bot</h4>

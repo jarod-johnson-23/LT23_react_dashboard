@@ -16,6 +16,17 @@ function Transcription() {
   const [isLoading, setIsLoading] = useState(false);
   const [prompt, setPrompt] = useState("");
 
+  const resetState = () => {
+    setAudioFile(null);
+    setSpeakerSection(false);
+    setTranscriptFilename("");
+    setSpeakersSummary({});
+    setSpeakerNames({});
+    setFileUploading(false);
+    setIsLoading(false);
+    setPrompt("");
+  };
+
   const onAudioFileUpload = (extractedColumns, uploadedFile) => {
     setAudioFile(uploadedFile);
     setFileUploading(false);
@@ -24,7 +35,7 @@ function Transcription() {
   const handleSpeakerNameChange = (speakerKey, newName) => {
     setSpeakerNames((prevNames) => ({
       ...prevNames,
-      [speakerKey]: newName, // Update the name for the specific speaker key
+      [speakerKey]: newName,
     }));
   };
 
@@ -32,12 +43,21 @@ function Transcription() {
     setIsLoading(true);
     const formData = new FormData();
     if (audioFile) {
-      const allowedTypes = ["audio/mpeg", "audio/mp4", "audio/wav", "audio/x-m4a", "audio/aac", "audio/ogg"];
+      const allowedTypes = [
+        "audio/mpeg",
+        "audio/mp4",
+        "audio/wav",
+        "audio/x-m4a",
+        "audio/aac",
+        "audio/ogg",
+      ];
       if (allowedTypes.includes(audioFile.type)) {
         formData.append("audio_input", audioFile);
         formData.append("prompt", prompt);
       } else {
-        alert("Only MP3, MP4, WAV, M4A, AAC, and OGG files are allowed at the moment");
+        alert(
+          "Only MP3, MP4, WAV, M4A, AAC, and OGG files are allowed at the moment"
+        );
         return 0;
       }
     } else {
@@ -48,12 +68,13 @@ function Transcription() {
       const data = await axios
         .post(`${API_BASE_URL}/transcription/mp3`, formData)
         .then((response) => {
-          const initialSpeakerNames = response.data.summaries;
+          const initialSpeakerNames = {}; // Initialize an empty object for speaker names
           setSpeakersSummary(response.data.summaries);
-          console.log(response.data.message);
-          Object.keys(speakersSummary).forEach((speakerKey) => {
-            initialSpeakerNames[speakerKey] = speakerKey; // Initially, key is the same as value
+
+          Object.keys(response.data.summaries).forEach((speakerKey, index) => {
+            initialSpeakerNames[speakerKey] = `Speaker ${index}`; // Set default names like "Speaker 0", "Speaker 1"
           });
+
           console.log(initialSpeakerNames);
           setSpeakerNames(initialSpeakerNames);
           setTranscriptFilename(response.data.message);
@@ -170,7 +191,7 @@ function Transcription() {
                       <div key={index} className="speaker-summary">
                         <input
                           type="text"
-                          defaultValue={speakerKey}
+                          value={speakerNames[speakerKey] || `Speaker ${index}`}
                           onChange={(e) =>
                             handleSpeakerNameChange(speakerKey, e.target.value)
                           }
@@ -179,15 +200,21 @@ function Transcription() {
                       </div>
                     )
                   )}
+                  <div className="transcript-btn-section">
+                    <button
+                      className="transcript-btn right-side-btn"
+                      onClick={updateSpeakers}
+                    >
+                      Submit Speakers
+                    </button>
+                    <button
+                      className="reset-btn"
+                      onClick={resetState}
+                    >
+                      Reset and Upload New File
+                    </button>
+                  </div>
                 </div>
-              )}
-              {speakerSection && (
-                <button
-                  className="transcript-btn right-side-btn"
-                  onClick={updateSpeakers}
-                >
-                  Submit Speakers
-                </button>
               )}
             </div>
           )}
