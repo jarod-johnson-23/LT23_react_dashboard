@@ -191,7 +191,8 @@ function Transcription() {
                       <div key={index} className="speaker-summary">
                         <input
                           type="text"
-                          value={speakerNames[speakerKey] || `Speaker ${index}`}
+                          placeholder={`Speaker ${index}`}
+                          value={speakerNames[speakerKey] || ""}
                           onChange={(e) =>
                             handleSpeakerNameChange(speakerKey, e.target.value)
                           }
@@ -207,10 +208,7 @@ function Transcription() {
                     >
                       Submit Speakers
                     </button>
-                    <button
-                      className="reset-btn"
-                      onClick={resetState}
-                    >
+                    <button className="reset-btn" onClick={resetState}>
                       Reset and Upload New File
                     </button>
                   </div>
