@@ -50,6 +50,8 @@ function Transcription() {
         "audio/x-m4a",
         "audio/aac",
         "audio/ogg",
+        "video/mp4",
+        "audio/mp3",
       ];
       if (allowedTypes.includes(audioFile.type)) {
         formData.append("audio_input", audioFile);
