@@ -14,6 +14,7 @@ import CocopahDB from "./CocopahDB";
 import Transcription from "./Transcription";
 import SowUpload from "./SowUpload";
 import SowChatBot from "./SowChatBot";
+import AudioBot from "./AudioBot";
 
 function App() {
   return (
@@ -108,6 +109,15 @@ function App() {
           element={
             <PrivateRoute>
               <SowChatBot />
+            </PrivateRoute>
+          }
+          exact
+        />
+        <Route
+          path="/realtime_ai"
+          element={
+            <PrivateRoute>
+              <AudioBot />
             </PrivateRoute>
           }
           exact

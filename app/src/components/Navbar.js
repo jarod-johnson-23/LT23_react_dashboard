@@ -1,12 +1,14 @@
 import "./Navbar.css";
 import logo from "./images/LT_logo.svg";
-import { useNavigate } from "react-router-dom";
+import toto_logo from "./images/ToTo_logo.png";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 
 function Navbar() {
   const token = localStorage.getItem("token");
-  let isLoggedIn = token !== null;
+  const isLoggedIn = token !== null;
   const navigate = useNavigate();
+  const location = useLocation(); // Hook to get the current URL location
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -16,17 +18,19 @@ function Navbar() {
   useEffect(() => {
     const user = localStorage.getItem("token");
     if (user) {
-      isLoggedIn = user;
+      // `isLoggedIn` logic doesn't need reassignment as it is derived
     }
   }, [token]);
+
+  const currentLogo = location.pathname === "/realtime_ai" ? toto_logo : logo;
 
   return (
     <div className="navbar">
       <img
-        src={logo}
+        src={currentLogo}
         className="logo"
         alt="logo"
-        onClick={(e) => {
+        onClick={() => {
           if (isLoggedIn) {
             navigate("/dashboard");
           } else {

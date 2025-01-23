@@ -10,6 +10,7 @@ import cocopah_img from "./components/images/cocopah_img.png";
 import transcription_img from "./components/images/transcription_img.jpg";
 import sowUpload_img from "./components/images/win98-upload.gif";
 import sowChatBot_img from "./components/images/sowChatBot.jpg";
+import audiobot_img from "./components/images/audiobot.png";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { API_BASE_URL } from "./config";
@@ -27,6 +28,7 @@ function Homepage() {
   const [transcription, setTranscription] = useState(false);
   const [sowUpload, setSowUpload] = useState(false);
   const [sowChatBot, setSowChatBot] = useState(false);
+  const [audioBot, setAudioBot] = useState(false);
 
   const getAccess = async (email) => {
     console.log(email);
@@ -55,6 +57,7 @@ function Homepage() {
       setTranscription(access.transcription || false);
       setSowUpload(access.sowUpload || false);
       setSowChatBot(access.sowChatBot || false);
+      setAudioBot(access.audioBot || false);
     }
   };
 
@@ -257,6 +260,21 @@ function Homepage() {
             </div>
             <div className="card-info">
               <h4>LT SOW Chat Bot</h4>
+            </div>
+          </div>
+        )}
+        {audioBot && (
+          <div
+            className="card"
+            onClick={(e) => {
+              navigate("/realtime_ai");
+            }}
+          >
+            <div className="img-div" id="sow_img">
+              <img src={audiobot_img} alt="OpenAI Logo" loading="lazy" />
+            </div>
+            <div className="card-info">
+              <h4>ToTo Realtime Voice AI</h4>
             </div>
           </div>
         )}
