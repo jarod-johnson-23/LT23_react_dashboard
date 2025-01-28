@@ -1,10 +1,11 @@
+/* Container for the entire page content below the Navbar */
 .audio-bot-container {
   display: flex;
   height: calc(100vh - 73px);
   background-color: #f5f5f5;
 }
 
-/* Sidebar Styling */
+/* -- Sidebar Styling (Events log) -- */
 .left-sidebar {
   width: 12%;
   background-color: #2f3556;
@@ -13,70 +14,96 @@
   box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
+}
+.left-sidebar h2 {
+  margin-bottom: 12px;
+}
+.event-log {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.event-log li {
+  margin-bottom: 8px;
 }
 
-/* Main Content Styling */
+/* -- Main Content (Messages + Input) -- */
 .main-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 20px;
-  background: rgba(255, 255, 255, 0.1); /* Transparent white */
-  backdrop-filter: blur(10px) saturate(180%);
-  -webkit-backdrop-filter: blur(10px) saturate(180%);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2); /* Subtle shadow */
-  border: 1px solid rgba(255, 255, 255, 0.2); /* Subtle border for better visibility */
-  overflow: hidden;
+  background: #ffffff; /* White background for clarity */
+  position: relative; /* so we can pin input to bottom if desired */
 }
 
-/* Messages Section */
+/* The scrolling messages region */
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 10px;
-
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px; /* spacing between messages */
 }
 
+/* Shared styling for all messages */
 .message {
-  margin: 5px 0;
-  padding: 10px;
-  border-radius: 8px;
-  max-width: 75%;
+  padding: 12px 16px;
+  border-radius: 16px;
+  line-height: 1.4;
+  font-size: 15px;
+  max-width: 60%; /* so they don’t stretch across entire container */
+  box-shadow: 0 2px 5px rgb(0 0 0 / 0.1);
 }
 
+/* -- Assistant (AI) messages on the left -- */
+.ai-message {
+  background-color: #cccccc;
+  color: black;
+  align-self: flex-start;
+  /* Make left bubble “arrow” effect by adjusting corners */
+  border-bottom-left-radius: 0;
+}
+
+/* -- User messages on the right -- */
 .user-message {
   background-color: #2f3556;
   color: white;
   align-self: flex-end;
+  /* Right bubble “arrow” effect */
+  border-bottom-right-radius: 0;
 }
 
-.ai-message {
-  background-color: #c09152;
-  color: white;
-  align-self: flex-start;
-}
-
-/* Input Section */
+/* -- Input bar at bottom -- */
 .input-section {
   display: flex;
   gap: 10px;
   align-items: center;
+  padding: 10px 20px;
+  border-top: 1px solid #ddd;
+  background: #fff;
+  flex-shrink: 0; /* prevent it from shrinking */
 }
 
 .message-input {
   flex: 1;
-  padding: 10px;
+  padding: 10px 14px;
   border: 1px solid #ddd;
-  border-radius: 8px;
+  border-radius: 20px;
   font-size: 16px;
+  outline: none;
 }
 
-.send-button,
-.mic-button {
-  padding: 10px;
+/* Send button with circular styling */
+.send-button {
+  width: 42px;
+  height: 42px;
   border: none;
-  border-radius: 8px;
+  border-radius: 50%;
   cursor: pointer;
   background-color: #2f3556;
   color: white;
@@ -86,31 +113,11 @@
   transition: background-color 0.2s ease;
 }
 
-.send-button img,
-.mic-button img {
+.send-button img {
   width: 20px;
   height: 20px;
 }
 
-.send-button:hover,
-.mic-button:hover {
+.send-button:hover {
   background-color: #c09152;
-}
-
-.event-log {
-  width: 100%;
-  list-style: none;
-  padding-left: 0;
-  height: 100%;
-  overflow-y: hidden;
-  overflow-x: wrap;
-  margin-bottom: 0px;
-}
-
-/* .event-log li {
-  
-} */
-
-.left-sidebar h2 {
-  margin-bottom: 2px;
 }

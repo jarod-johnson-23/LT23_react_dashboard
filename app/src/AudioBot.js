@@ -16,9 +16,10 @@ function AudioBot() {
   const [isSpacebarPressed, setIsSpacebarPressed] = useState(false);
   const [isMessageFinalized, setIsMessageFinalized] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [isDataChannelOpen, setIsDataChannelOpen] = useState(false);
   const audioContext = useRef(null);
   const peerConnection = useRef(null);
-  const dataChannel = useRef(null);
+  const [dataChannel, setDataChannel] = useState(null);
   const mediaRecorder = useRef(null);
   const audioStream = useRef(null);
 
@@ -46,10 +47,12 @@ function AudioBot() {
 
     pc.addTrack(audioStream.current.getTracks()[0]);
 
-    // Set up data channel for sending and receiving events
     const dc = pc.createDataChannel("oai-events");
+    peerConnection.current = pc; // Set peer connection reference early
+    setDataChannel(dc); // Trigger state change for useEffect
     dc.addEventListener("open", () => {
       console.log("Data channel is open and ready for communication.");
+      setIsDataChannelOpen(true);
     });
     dc.addEventListener("message", (e) => {
       const realtimeEvent = JSON.parse(e.data);
@@ -57,13 +60,10 @@ function AudioBot() {
     });
     dc.addEventListener("close", () => {
       console.log("Data channel is closed.");
+      setIsDataChannelOpen(false);
     });
 
-    peerConnection.current = pc;
-    dataChannel.current = dc;
-
     try {
-      // Start the session using the Session Description Protocol (SDP)
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
@@ -78,16 +78,41 @@ function AudioBot() {
         },
       });
 
+      if (!sdpResponse.ok) {
+        throw new Error(`SDP response failed: ${sdpResponse.status}`);
+      }
+
       const answer = {
         type: "answer",
         sdp: await sdpResponse.text(),
       };
       await pc.setRemoteDescription(answer);
-      console.log("Remote description set with answer.");
+      console.log("SDP exchange completed successfully.");
     } catch (error) {
-      console.error("Error during WebRTC initialization:", error);
+      console.error("Error during SDP exchange:", error);
     }
   };
+
+  useEffect(() => {
+    if (!dataChannel) return;
+
+    const handleMessage = (e) => {
+      const realtimeEvent = JSON.parse(e.data);
+      handleIncomingEvent(realtimeEvent);
+    };
+    const handleClose = () => {
+      console.log("Data channel is closed.");
+      setDataChannel(null);
+    };
+
+    // dataChannel.addEventListener("message", handleMessage);
+    // dataChannel.addEventListener("close", handleClose);
+
+    // return () => {
+    //   dataChannel.removeEventListener("message", handleMessage);
+    //   dataChannel.removeEventListener("close", handleClose);
+    // };
+  }, [dataChannel]);
 
   const startAudioRecording = () => {
     if (peerConnection.current && audioStream.current) {
@@ -188,18 +213,41 @@ function AudioBot() {
   // Update messages by item_id
   const updateMessagesByItemId = (itemId, text) => {
     setMessages((prev) => {
-      const existingMessageIndex = prev.findIndex(
-        (msg) => msg.item_id === itemId
-      );
-      if (existingMessageIndex !== -1) {
-        const updatedMessages = [...prev];
-        updatedMessages[existingMessageIndex].text += text;
-        return updatedMessages;
-      } else {
-        return [...prev, { item_id: itemId, text, sender: "ai" }];
+      const idx = prev.findIndex((m) => m.item_id === itemId);
+      if (idx === -1) {
+        // If the message doesn't exist yet, you could ignore or store partial
+        return prev;
       }
+
+      const updated = [...prev];
+      const existing = updated[idx];
+
+      updated[idx] = {
+        ...existing,
+        text: existing.text + text, // append the delta
+      };
+
+      return updated;
     });
   };
+
+  function handleUserTranscript(event) {
+    // Suppose the server’s event structure has `item_id`, `previous_item_id`, `transcript`, etc.
+    const { item_id, transcript, role, previous_item_id } = event;
+
+    if (!item_id) {
+      console.warn("No item_id found in user transcript event:", event);
+      return;
+    }
+
+    // Often we know it's "user", but if the event includes a role, you can use that:
+    insertOrUpdateMessage({
+      item_id,
+      role: role || "user",
+      text: transcript || "",
+      previous_item_id,
+    });
+  }
 
   // Handle incoming WebRTC events
   const handleIncomingEvent = (event) => {
@@ -207,11 +255,38 @@ function AudioBot() {
     logEvent(event);
 
     switch (event.type) {
-      case "response.text.delta":
-        if (event.item_id) {
-          updateMessagesByItemId(event.item_id, event.delta);
-        }
+      case "response.text.delta": {
+        if (!event.item_id) return;
+        // We'll do an "append" version:
+        const delta = event.delta;
+        appendMessageText(event.item_id, delta);
         break;
+      }
+
+      case "conversation.item.created": {
+        // "previous_item_id" and "item" are inside event
+        const { previous_item_id, item } = event;
+
+        // item.id is the new "msg_003", etc.
+        // item.role is "user" or "assistant"
+        // item.content is an array. You can parse out text/transcript from it.
+        let initialText = "";
+        if (item.content && item.content.length > 0) {
+          // For example, if content[0].type === 'input_audio', read its transcript
+          // If content[0].type === 'input_text', read content[0].text
+          const c0 = item.content[0];
+          // You can unify them or do if/else. For example:
+          initialText = c0.transcript || c0.text || "";
+        }
+
+        insertOrUpdateMessage({
+          item_id: item.id,
+          role: item.role, // 'user', 'assistant', etc.
+          text: initialText,
+          previous_item_id, // might be null
+        });
+        break;
+      }
 
       case "response.text.done":
         if (event.item_id) {
@@ -237,104 +312,158 @@ function AudioBot() {
         finalizeTranscript(event);
         break;
 
+      case "conversation.item.input_audio_transcription.completed":
+        handleUserTranscript(event);
+        break;
+
       default:
         console.log("Unhandled event type:", event.type);
     }
   };
 
+  function appendMessageText(item_id, textDelta) {
+    setMessages((prev) => {
+      const idx = prev.findIndex((m) => m.item_id === item_id);
+      if (idx === -1) {
+        // If we truly never created the item, fallback to insertOrUpdate
+        return prev;
+      }
+
+      const updated = [...prev];
+      updated[idx] = {
+        ...updated[idx],
+        text: (updated[idx].text || "") + textDelta,
+      };
+      return updated;
+    });
+  }
+
+  function insertOrUpdateMessage({ item_id, role, text, previous_item_id }) {
+    // We'll always call this inside setMessages to produce the new state.
+    setMessages((prev) => {
+      // 1. Check if message with this item_id already exists
+      const existingIndex = prev.findIndex((m) => m.item_id === item_id);
+
+      if (existingIndex !== -1) {
+        // === UPDATE existing message ===
+        const updatedMessages = [...prev];
+        const existingMsg = updatedMessages[existingIndex];
+
+        // For text, we can either REPLACE or APPEND. Usually for transcripts,
+        // we might replace. For text "delta" from the assistant, we might append.
+        // This example just replaces for transcripts; you can adapt as needed.
+        updatedMessages[existingIndex] = {
+          ...existingMsg,
+          role: role ?? existingMsg.role,
+          text: text !== undefined ? text : existingMsg.text,
+        };
+        return updatedMessages;
+      }
+
+      // === INSERT new message ===
+      const newMsg = {
+        item_id,
+        role,
+        text: text || "",
+      };
+
+      // If no previous_item_id, place at the front (index=0)
+      if (!previous_item_id) {
+        return [newMsg, ...prev];
+      }
+
+      // Otherwise find the item with item_id === previous_item_id
+      const insertAfterIndex = prev.findIndex(
+        (m) => m.item_id === previous_item_id
+      );
+
+      // If we can’t find that item, fallback to appending at the end
+      if (insertAfterIndex === -1) {
+        return [...prev, newMsg];
+      }
+
+      // Otherwise insert after that item
+      const newArray = [...prev];
+      newArray.splice(insertAfterIndex + 1, 0, newMsg);
+      return newArray;
+    });
+  }
+
+  function handleConversationItemCreated(event) {
+    const { previous_item_id, item } = event;
+    const newItemId = item.id; // e.g. "msg_003"
+    // Grab existing text from content if you want:
+    let initialText = "";
+    if (item.content && item.content.length > 0) {
+      const firstChunk = item.content[0];
+      // e.g. from input_text, transcript, or both
+      initialText = firstChunk.text || firstChunk.transcript || "";
+    }
+
+    const newMessage = {
+      item_id: newItemId,
+      role: item.role,
+      text: initialText,
+    };
+
+    setMessages((prev) => {
+      // If message already exists, skip or update
+      const existingIndex = prev.findIndex((m) => m.item_id === newItemId);
+      if (existingIndex !== -1) {
+        // Possibly merge text if you want
+        return prev;
+      }
+
+      // Insert at correct spot
+      if (!previous_item_id) {
+        // No previous => put at front
+        return [newMessage, ...prev];
+      }
+
+      const insertAfterIndex = prev.findIndex(
+        (m) => m.item_id === previous_item_id
+      );
+
+      // If we can't find the reference item, fallback to end
+      if (insertAfterIndex === -1) {
+        return [...prev, newMessage];
+      }
+
+      const newArray = [...prev];
+      newArray.splice(insertAfterIndex + 1, 0, newMessage);
+      return newArray;
+    });
+  }
+
+  const sendClientEvent = (message) => {
+    if (!isDataChannelOpen) {
+      console.error("Data channel is not open.");
+      return;
+    }
+    dataChannel.send(JSON.stringify(message));
+    console.log("Message sent:", message);
+  };
+
   const handleSendMessage = () => {
-    if (!dataChannel.current) {
-      console.error("Data channel is not initialized.");
-      return;
-    }
-
-    // Wait until the data channel is open
-    if (dataChannel.current.readyState === "connecting") {
-      console.log("Data channel is still connecting. Retrying...");
-      const interval = setInterval(() => {
-        if (dataChannel.current.readyState === "open") {
-          clearInterval(interval);
-
-          // Send the conversation.item.create event
-          const messageEvent = {
-            event_id: uuidv4(),
-            type: "conversation.item.create",
-            item: {
-              type: "message",
-              object: "realtime.item",
-              role: "user",
-              content: [{ type: "input_text", text: inputValue }],
-            },
-          };
-          dataChannel.current.send(JSON.stringify(messageEvent));
-          console.log("Text message sent:", messageEvent);
-
-          // Send the response.create event
-          const responseEvent = {
-            event_id: uuidv4(),
-            type: "response.create",
-          };
-          dataChannel.current.send(JSON.stringify(responseEvent));
-          console.log("Response.create event sent:", responseEvent);
-
-          // Update the local state for messages
-          setMessages((prev) => [
-            ...prev,
-            { sender: "user", text: inputValue },
-          ]);
-          setInputValue("");
-        }
-      }, 100); // Check every 100ms
-      return;
-    }
-
-    // If already open, send the events immediately
     const messageEvent = {
       event_id: uuidv4(),
       type: "conversation.item.create",
       item: {
         type: "message",
-        object: "realtime.item",
         role: "user",
         content: [{ type: "input_text", text: inputValue }],
       },
     };
-    dataChannel.current.send(JSON.stringify(messageEvent));
-    console.log("Text message sent:", messageEvent);
+    sendClientEvent(messageEvent);
 
     const responseEvent = {
       event_id: uuidv4(),
       type: "response.create",
     };
-    dataChannel.current.send(JSON.stringify(responseEvent));
-    console.log("Response.create event sent:", responseEvent);
+    sendClientEvent(responseEvent);
 
-    setMessages((prev) => [...prev, { sender: "user", text: inputValue }]);
+    // setMessages((prev) => [...prev, { role: "user", text: inputValue }]);
     setInputValue("");
-  };
-
-  // Handle text delta events (streaming text)
-  const handleTextDelta = (event) => {
-    if (isMessageFinalized) {
-      // Start a new message
-      setMessages((prev) => [...prev, { sender: "ai", text: event.delta }]);
-      setIsMessageFinalized(false);
-    } else {
-      setMessages((prev) => {
-        const lastMessage = prev[prev.length - 1];
-        if (lastMessage && lastMessage.sender === "ai") {
-          lastMessage.text += event.delta;
-          return [...prev.slice(0, -1), lastMessage];
-        }
-        return [...prev, { sender: "ai", text: event.delta }];
-      });
-    }
-  };
-
-  // Finalize text message
-  const finalizeTextMessage = (event) => {
-    console.log("Text finalized:", event.text);
-    setIsMessageFinalized(true);
   };
 
   // Handle audio delta (chunked audio)
@@ -383,60 +512,11 @@ function AudioBot() {
     }
   };
 
-  // Handle transcript delta (streaming transcription)
-  const handleTranscriptDelta = (event) => {
-    console.log("Transcript delta:", event.delta);
-    setMessages((prev) => {
-      const lastMessage = prev[prev.length - 1];
-      if (lastMessage && lastMessage.sender === "ai") {
-        lastMessage.text += event.delta;
-        return [...prev.slice(0, -1), lastMessage];
-      }
-      return [...prev, { sender: "ai", text: event.delta }];
-    });
-  };
-
   // Finalize transcription
   const finalizeTranscript = (event) => {
     console.log("Final transcript:", event.transcript);
     setIsMessageFinalized(true);
   };
-
-  // Send audio chunks to the server
-  const sendAudioChunk = (audioData) => {
-    if (dataChannel.current && dataChannel.current.readyState === "open") {
-      const event = {
-        event_id: uuidv4(),
-        type: "input_audio_buffer.append",
-        audio: btoa(String.fromCharCode(...new Uint8Array(audioData))), // Base64-encode the audio
-      };
-      dataChannel.current.send(JSON.stringify(event));
-      console.log("Audio chunk sent:", event);
-    }
-  };
-
-  // Fetch session token and set up WebRTC connection
-  useEffect(() => {
-    const fetchSession = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/audiobot/session`);
-        if (!response.ok) {
-          throw new Error(`Error fetching session: ${response.status}`);
-        }
-
-        const data = await response.json();
-        setClientSecret(data.client_secret?.value);
-        console.log("Client secret obtained:", data.client_secret?.value);
-
-        // Initialize WebRTC connection after obtaining the client secret
-        initializeWebRTC();
-      } catch (error) {
-        console.error("Failed to fetch session:", error);
-      }
-    };
-
-    fetchSession();
-  }, []);
 
   return (
     <>
@@ -460,7 +540,7 @@ function AudioBot() {
               <p
                 key={index}
                 className={`message ${
-                  msg.sender === "user" ? "user-message" : "ai-message"
+                  msg.role === "user" ? "user-message" : "ai-message"
                 }`}
               >
                 {msg.text}
@@ -483,16 +563,7 @@ function AudioBot() {
                 }
               }}
             />
-            <button
-              className="send-button"
-              onClick={() => {
-                handleSendMessage();
-                setMessages((prev) => [
-                  ...prev,
-                  { sender: "user", text: inputValue },
-                ]);
-              }}
-            >
+            <button className="send-button" onClick={handleSendMessage}>
               <img src={sendArrowIcon} alt="Send" className="icon" />
             </button>
           </div>
