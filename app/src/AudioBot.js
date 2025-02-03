@@ -3,13 +3,18 @@ import React, { useEffect, useState, useRef } from "react";
 import Navbar from "./components/Navbar";
 import sendArrowIcon from "./components/images/send_arrow_icon.svg";
 import microphoneIcon from "./components/images/microphone_icon.svg";
+import microphoneSlashIcon from "./components/images/microphone_slash_icon.svg";
 import { API_BASE_URL } from "./config";
-import { v4 as uuidv4 } from "uuid"; // For generating unique event IDs
+// import { v4 as uuidv4 } from "uuid";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import CustomDropdown from "./components/CustomDropdown";
 
 function AudioBot() {
   const [clientSecret, setClientSecret] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [eventLog, setEventLog] = useState([]);
+  const [messages, setMessages] = useState([]); // Current session messages
+  const [oldMessages, setOldMessages] = useState([]); // Previous session messages
   const [audioQueue, setAudioQueue] = useState([]);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -17,11 +22,17 @@ function AudioBot() {
   const [isMessageFinalized, setIsMessageFinalized] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [isDataChannelOpen, setIsDataChannelOpen] = useState(false);
+  const [isSessionStarted, setIsSessionStarted] = useState(false); // Track session state
   const audioContext = useRef(null);
   const peerConnection = useRef(null);
   const [dataChannel, setDataChannel] = useState(null);
-  const mediaRecorder = useRef(null);
   const audioStream = useRef(null);
+  const [instructions, setInstructions] = useState(""); // User input for instructions
+  const [voice, setVoice] = useState(""); // Default voice selection
+  const [isSessionReady, setIsSessionReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // Show spinner while waiting
+  const messagesContainerRef = useRef(null);
+  const dataChannelRef = useRef(null);
 
   const initializeWebRTC = async (token) => {
     const pc = new RTCPeerConnection();
@@ -48,6 +59,7 @@ function AudioBot() {
     pc.addTrack(audioStream.current.getTracks()[0]);
 
     const dc = pc.createDataChannel("oai-events");
+    dataChannelRef.current = dc; // Store it in a ref
     peerConnection.current = pc; // Set peer connection reference early
     setDataChannel(dc); // Trigger state change for useEffect
     dc.addEventListener("open", () => {
@@ -61,6 +73,7 @@ function AudioBot() {
     dc.addEventListener("close", () => {
       console.log("Data channel is closed.");
       setIsDataChannelOpen(false);
+      dataChannelRef.current = null; // Clear it when closed
     });
 
     try {
@@ -93,26 +106,83 @@ function AudioBot() {
     }
   };
 
-  useEffect(() => {
-    if (!dataChannel) return;
+  const MAX_RETRIES = 3;
 
-    const handleMessage = (e) => {
-      const realtimeEvent = JSON.parse(e.data);
-      handleIncomingEvent(realtimeEvent);
-    };
-    const handleClose = () => {
-      console.log("Data channel is closed.");
-      setDataChannel(null);
-    };
+  const startSession = async (retryCount = 0) => {
+    try {
+      setIsLoading(true);
+      setIsSessionReady(false);
 
-    // dataChannel.addEventListener("message", handleMessage);
-    // dataChannel.addEventListener("close", handleClose);
+      // Cleanup any previous session if needed
+      cleanupWebRTC();
 
-    // return () => {
-    //   dataChannel.removeEventListener("message", handleMessage);
-    //   dataChannel.removeEventListener("close", handleClose);
-    // };
-  }, [dataChannel]);
+      // Move user and assistant messages to oldMessages
+      if (messages.length > 0) {
+        setOldMessages((prev) => [
+          ...messages.map((msg) => ({
+            ...msg,
+            isOld: true,
+          })),
+          ...prev,
+        ]);
+      }
+
+      // Insert a system message indicating the settings change
+      setMessages([
+        {
+          role: "system",
+          text: "Assistant settings changed.",
+          timestamp: Date.now(),
+        },
+      ]);
+
+      const response = await fetch(`${API_BASE_URL}/audiobot/session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instructions, voice }),
+      });
+
+      // If the server returns a 500 error, throw an error to trigger a retry.
+      if (response.status === 500) {
+        throw new Error("500");
+      }
+
+      if (!response.ok) {
+        throw new Error(`Session creation failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const token = data.client_secret?.value;
+      setClientSecret(token);
+      console.log("Session started. Token:", token);
+
+      // Initialize WebRTC for the new session.
+      initializeWebRTC(token);
+      setIsSessionStarted(true);
+    } catch (error) {
+      // Check if the error was a 500 error and we haven't exceeded our max retries.
+      if (error.message === "500" && retryCount < MAX_RETRIES) {
+        console.error(
+          `Attempt ${retryCount + 1} failed with 500. Retrying in 1 second...`
+        );
+        setTimeout(() => {
+          startSession(retryCount + 1);
+        }, 1000);
+      } else {
+        console.error("Failed to start session:", error);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "system",
+            text: "An error occurred while starting the session.",
+            timestamp: Date.now(),
+          },
+        ]);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const startAudioRecording = () => {
     if (peerConnection.current && audioStream.current) {
@@ -156,59 +226,47 @@ function AudioBot() {
     setIsRecording(false);
   };
 
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      const isTyping = document.activeElement.tagName === "INPUT";
-      if (e.code === "Space" && !isSpacebarPressed && !isTyping) {
-        setIsSpacebarPressed(true);
-        startAudioRecording();
-      }
-    };
+  const cleanupWebRTC = () => {
+    // Close and null out the data channel if it exists.
+    if (dataChannel) {
+      dataChannel.close();
+      setDataChannel(null);
+    }
 
-    const handleKeyUp = (e) => {
-      if (e.code === "Space" && isSpacebarPressed) {
-        setIsSpacebarPressed(false);
-        stopAudioRecording();
-      }
-    };
+    // If there's an active peer connection, close it.
+    if (peerConnection.current) {
+      peerConnection.current.close();
+      peerConnection.current = null;
+    }
 
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
+    // Optionally stop any active audio tracks from the stream.
+    if (audioStream.current) {
+      audioStream.current.getTracks().forEach((track) => track.stop());
+      audioStream.current = null;
+    }
 
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-    };
-  }, [isSpacebarPressed]);
-
-  // Fetch session token and set up WebRTC connection
-  useEffect(() => {
-    const fetchSession = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/audiobot/session`);
-        if (!response.ok) {
-          throw new Error(`Error fetching session: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const token = data.client_secret?.value;
-        setClientSecret(token);
-        console.log("Client secret obtained:", token);
-
-        // Initialize WebRTC connection after obtaining the client secret
-        initializeWebRTC(token);
-      } catch (error) {
-        console.error("Failed to fetch session:", error);
-      }
-    };
-
-    fetchSession();
-  }, []);
-
-  // Log event in the sidebar
-  const logEvent = (event) => {
-    setEventLog((prev) => [event.type, ...prev]);
+    // Clear out any audio processing state.
+    setAudioQueue([]);
+    if (audioContext.current) {
+      audioContext.current.close();
+      audioContext.current = null;
+    }
   };
+
+  const toggleAudioRecording = () => {
+    if (isRecording) {
+      stopAudioRecording();
+    } else {
+      startAudioRecording();
+    }
+  };
+
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop =
+        messagesContainerRef.current.scrollHeight;
+    }
+  }, [messages, oldMessages]);
 
   // Update messages by item_id
   const updateMessagesByItemId = (itemId, text) => {
@@ -232,7 +290,6 @@ function AudioBot() {
   };
 
   function handleUserTranscript(event) {
-    // Suppose the server’s event structure has `item_id`, `previous_item_id`, `transcript`, etc.
     const { item_id, transcript, role, previous_item_id } = event;
 
     if (!item_id) {
@@ -240,21 +297,28 @@ function AudioBot() {
       return;
     }
 
-    // Often we know it's "user", but if the event includes a role, you can use that:
+    // If transcript is empty or only whitespace, substitute with italicized text.
+    const textToInsert =
+      transcript && transcript.trim() !== "" ? transcript : "*Inaudible Text*";
+
     insertOrUpdateMessage({
       item_id,
       role: role || "user",
-      text: transcript || "",
+      text: textToInsert,
       previous_item_id,
     });
   }
 
   // Handle incoming WebRTC events
   const handleIncomingEvent = (event) => {
-    console.log("Incoming event:", event);
-    logEvent(event);
-
     switch (event.type) {
+      case "session.created": {
+        console.log("Session is fully active.");
+        setIsSessionReady(true); // Remove overlay
+        setIsLoading(false); // Hide spinner
+        break;
+      }
+
       case "response.text.delta": {
         if (!event.item_id) return;
         // We'll do an "append" version:
@@ -264,27 +328,61 @@ function AudioBot() {
       }
 
       case "conversation.item.created": {
-        // "previous_item_id" and "item" are inside event
+        // Destructure previous_item_id and item from the event.
         const { previous_item_id, item } = event;
 
-        // item.id is the new "msg_003", etc.
-        // item.role is "user" or "assistant"
-        // item.content is an array. You can parse out text/transcript from it.
-        let initialText = "";
-        if (item.content && item.content.length > 0) {
-          // For example, if content[0].type === 'input_audio', read its transcript
-          // If content[0].type === 'input_text', read content[0].text
-          const c0 = item.content[0];
-          // You can unify them or do if/else. For example:
-          initialText = c0.transcript || c0.text || "";
+        // Check if this is a function call event.
+        if (item.type === "function_call") {
+          // Insert a message with role "function" and a placeholder text.
+          insertOrUpdateMessage({
+            item_id: item.id,
+            role: "function",
+            text: "Retrieving Function Results...",
+            previous_item_id,
+          });
+        } else if (item.type === "function_call_output") {
+          // Instead of inserting a new message, update the existing function call message.
+          // We search for the message with role "function" that has the placeholder text.
+          setMessages((prev) => {
+            const index = prev.findIndex(
+              (msg) =>
+                msg.role === "function" &&
+                msg.text === "Retrieving Function Results..."
+            );
+            if (index !== -1) {
+              const updated = [...prev];
+              updated[index] = {
+                ...updated[index],
+                text: "Function call successful",
+              };
+              return updated;
+            } else {
+              // Fallback: if not found, insert a new message with the success text.
+              return [
+                ...prev,
+                {
+                  item_id: item.id,
+                  role: "function",
+                  text: "Function call successful",
+                  timestamp: Date.now(),
+                },
+              ];
+            }
+          });
+        } else {
+          // Normal processing for other types of items.
+          let initialText = "";
+          if (item.content && item.content.length > 0) {
+            const c0 = item.content[0];
+            initialText = c0.transcript || c0.text || "";
+          }
+          insertOrUpdateMessage({
+            item_id: item.id,
+            role: item.role, // "user", "assistant", etc.
+            text: initialText,
+            previous_item_id,
+          });
         }
-
-        insertOrUpdateMessage({
-          item_id: item.id,
-          role: item.role, // 'user', 'assistant', etc.
-          text: initialText,
-          previous_item_id, // might be null
-        });
         break;
       }
 
@@ -316,8 +414,58 @@ function AudioBot() {
         handleUserTranscript(event);
         break;
 
+      case "response.function_call_arguments.done":
+        searchFunction(event);
+        break;
+
       default:
-        console.log("Unhandled event type:", event.type);
+      // console.log("Unhandled event type:", event.type);
+    }
+  };
+
+  const searchFunction = async (event) => {
+    try {
+      const query = event.arguments;
+      const response = await fetch(
+        `${API_BASE_URL}/audiobot/search_sections?query=${query}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Error fetching session: ${response.status}`);
+      }
+      const data = await response.json();
+
+      const functionResponse = {
+        type: "conversation.item.create",
+        item: {
+          type: "function_call_output",
+          call_id: `${event.call_id}`,
+          output: JSON.stringify(data, null, 2),
+          // output: "Function call success, this is a test, please let the user know the call was successful"
+        },
+      };
+
+      sendClientEvent(functionResponse);
+
+      const responseEvent = {
+        type: "response.create",
+      };
+      sendClientEvent(responseEvent);
+    } catch (error) {
+      console.error("Failed to search term:", error);
+      sendClientEvent({
+        type: "conversation.item.create",
+        item: {
+          type: "function_call_output",
+          call_id: `${event.call_id}`,
+          output: "AN ERROR OCCURED, UNABLE TO SEARCH",
+        },
+      });
+
+      const responseEvent = {
+        type: "response.create",
+      };
+      sendClientEvent(responseEvent);
     }
   };
 
@@ -339,19 +487,22 @@ function AudioBot() {
   }
 
   function insertOrUpdateMessage({ item_id, role, text, previous_item_id }) {
-    // We'll always call this inside setMessages to produce the new state.
+    // Always assign a timestamp when a message is created
+    const newMessage = {
+      item_id,
+      role,
+      text: text || "",
+      timestamp: Date.now(), // assign the creation time
+    };
+
     setMessages((prev) => {
       // 1. Check if message with this item_id already exists
       const existingIndex = prev.findIndex((m) => m.item_id === item_id);
 
       if (existingIndex !== -1) {
-        // === UPDATE existing message ===
+        // Update existing message without changing its timestamp
         const updatedMessages = [...prev];
         const existingMsg = updatedMessages[existingIndex];
-
-        // For text, we can either REPLACE or APPEND. Usually for transcripts,
-        // we might replace. For text "delta" from the assistant, we might append.
-        // This example just replaces for transcripts; you can adapt as needed.
         updatedMessages[existingIndex] = {
           ...existingMsg,
           role: role ?? existingMsg.role,
@@ -360,72 +511,19 @@ function AudioBot() {
         return updatedMessages;
       }
 
-      // === INSERT new message ===
-      const newMsg = {
-        item_id,
-        role,
-        text: text || "",
-      };
-
-      // If no previous_item_id, place at the front (index=0)
+      // 2. Insert new message.
       if (!previous_item_id) {
-        return [newMsg, ...prev];
-      }
-
-      // Otherwise find the item with item_id === previous_item_id
-      const insertAfterIndex = prev.findIndex(
-        (m) => m.item_id === previous_item_id
-      );
-
-      // If we can’t find that item, fallback to appending at the end
-      if (insertAfterIndex === -1) {
-        return [...prev, newMsg];
-      }
-
-      // Otherwise insert after that item
-      const newArray = [...prev];
-      newArray.splice(insertAfterIndex + 1, 0, newMsg);
-      return newArray;
-    });
-  }
-
-  function handleConversationItemCreated(event) {
-    const { previous_item_id, item } = event;
-    const newItemId = item.id; // e.g. "msg_003"
-    // Grab existing text from content if you want:
-    let initialText = "";
-    if (item.content && item.content.length > 0) {
-      const firstChunk = item.content[0];
-      // e.g. from input_text, transcript, or both
-      initialText = firstChunk.text || firstChunk.transcript || "";
-    }
-
-    const newMessage = {
-      item_id: newItemId,
-      role: item.role,
-      text: initialText,
-    };
-
-    setMessages((prev) => {
-      // If message already exists, skip or update
-      const existingIndex = prev.findIndex((m) => m.item_id === newItemId);
-      if (existingIndex !== -1) {
-        // Possibly merge text if you want
-        return prev;
-      }
-
-      // Insert at correct spot
-      if (!previous_item_id) {
-        // No previous => put at front
+        // No previous => put at the beginning (if that’s your intended order)
         return [newMessage, ...prev];
       }
 
+      // Otherwise, find the reference item and insert after it.
       const insertAfterIndex = prev.findIndex(
         (m) => m.item_id === previous_item_id
       );
 
-      // If we can't find the reference item, fallback to end
       if (insertAfterIndex === -1) {
+        // If reference not found, append at the end
         return [...prev, newMessage];
       }
 
@@ -436,17 +534,23 @@ function AudioBot() {
   }
 
   const sendClientEvent = (message) => {
-    if (!isDataChannelOpen) {
-      console.error("Data channel is not open.");
+    if (
+      !dataChannelRef.current ||
+      dataChannelRef.current.readyState !== "open"
+    ) {
+      console.error(
+        "Data channel is not open (readyState:",
+        dataChannelRef.current ? dataChannelRef.current.readyState : "null",
+        ")."
+      );
       return;
     }
-    dataChannel.send(JSON.stringify(message));
-    console.log("Message sent:", message);
+
+    dataChannelRef.current.send(JSON.stringify(message));
   };
 
   const handleSendMessage = () => {
     const messageEvent = {
-      event_id: uuidv4(),
       type: "conversation.item.create",
       item: {
         type: "message",
@@ -457,7 +561,6 @@ function AudioBot() {
     sendClientEvent(messageEvent);
 
     const responseEvent = {
-      event_id: uuidv4(),
       type: "response.create",
     };
     sendClientEvent(responseEvent);
@@ -505,7 +608,6 @@ function AudioBot() {
 
   // Finalize audio playback
   const finalizeAudioPlayback = () => {
-    console.log("Audio playback finalized.");
     // Allow the remaining chunks to finish playing
     if (audioQueue.length === 0) {
       setIsPlayingAudio(false);
@@ -514,7 +616,6 @@ function AudioBot() {
 
   // Finalize transcription
   const finalizeTranscript = (event) => {
-    console.log("Final transcript:", event.transcript);
     setIsMessageFinalized(true);
   };
 
@@ -522,30 +623,55 @@ function AudioBot() {
     <>
       <Navbar />
       <div className="audio-bot-container">
-        {/* Sidebar */}
-        <div className="left-sidebar">
-          <h2>Event Log</h2>
-          <ul className="event-log">
-            {eventLog.map((event, index) => (
-              <li key={eventLog.length - index - 1}>{event}</li>
-            ))}
-          </ul>
+        {/* Sidebar Configuration */}
+        <div className="session-config">
+          <textarea
+            placeholder="Enter assistant instructions..."
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            className="instruction-input"
+          />
+          <CustomDropdown selectedValue={voice} onChange={setVoice} />
+          <button className="apply-button" onClick={startSession}>
+            Apply
+          </button>
         </div>
 
         {/* Main Content */}
         <div className="main-content">
-          {/* Messages */}
-          <div className="messages">
-            {messages.map((msg, index) => (
-              <p
-                key={index}
-                className={`message ${
-                  msg.role === "user" ? "user-message" : "ai-message"
-                }`}
-              >
-                {msg.text}
-              </p>
-            ))}
+          {/* Overlay that blocks user interactions until session starts */}
+          {(!isSessionStarted || !isSessionReady) && (
+            <div className="overlay">
+              {isLoading ? (
+                <div className="spinner"></div>
+              ) : (
+                "Waiting for Chatbot to Connect..."
+              )}
+            </div>
+          )}
+
+          <div className="messages" ref={messagesContainerRef}>
+            {[...oldMessages, ...messages]
+              .sort((a, b) => a.timestamp - b.timestamp)
+              .map((msg, index) => (
+                <div
+                  key={`msg-${index}`}
+                  className={`message ${msg.role}-message ${
+                    msg.isOld ? "old-message" : ""
+                  }`}
+                >
+                  {msg.role === "system" ? (
+                    <div className="system-message">{msg.text}</div>
+                  ) : (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeRaw]}
+                    >
+                      {msg.text}
+                    </ReactMarkdown>
+                  )}
+                </div>
+              ))}
           </div>
 
           {/* Input Section */}
@@ -559,11 +685,28 @@ function AudioBot() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   handleSendMessage();
-                  console.log("message sent");
                 }
               }}
+              disabled={!isSessionStarted}
             />
-            <button className="send-button" onClick={handleSendMessage}>
+            <button
+              className={`mic-button ${
+                isRecording ? "active" : ""
+              }`}
+              onClick={toggleAudioRecording}
+              disabled={!isSessionStarted}
+            >
+              <img
+                src={isRecording ? microphoneIcon : microphoneSlashIcon}
+                alt="Mic"
+                className="icon"
+              />
+            </button>
+            <button
+              className="send-button"
+              onClick={handleSendMessage}
+              disabled={!isSessionStarted}
+            >
               <img src={sendArrowIcon} alt="Send" className="icon" />
             </button>
           </div>
